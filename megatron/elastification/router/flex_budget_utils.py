@@ -24,6 +24,14 @@ def get_num_parameters(
 
     norm_multiplier = 1
 
+    # Dense hybrid models (e.g. Nemotron-Nano-12B-v2) have no MoE config; treat it as zero.
+    if num_experts is None:
+        num_experts = 0
+    if shared_expert_intermediate_size is None:
+        shared_expert_intermediate_size = 0
+    if moe_router_topk is None:
+        moe_router_topk = 0
+
     embedding = vocab_size * hidden_size
     final_layernorm = hidden_size * 1
     output_layer = 0 if tied_vocab else (vocab_size * hidden_size)
@@ -162,6 +170,16 @@ def get_num_parameters(
             else:
                 all_params += moe_all
                 active_params += moe_active
+        elif c == '-':
+            # Dense MLP layer (squared-ReLU, no gate): pre-MLP norm + fc1 + fc2.
+            if flex_hetero_ffn:
+                mlp_idx = hybrid_pattern[: i + 1].count('-') - 1
+                ffn = ffn_hidden_size[mlp_idx]
+            else:
+                ffn = ffn_hidden_size
+            mlp = norm_multiplier * hidden_size + 2 * hidden_size * ffn
+            all_params += mlp
+            active_params += mlp
         elif c == '|':
             pass
         else:
